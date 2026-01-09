@@ -1,0 +1,6 @@
+[submodule "sundials"]
+	path = sundials
+	url = https://github.com/llnl/sundials
+[submodule "ginkgo"]
+	path = ginkgo
+	url = https://github.com/ginkgo-project/ginkgo
