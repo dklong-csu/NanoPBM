@@ -17,5 +17,5 @@ jobs:
         sudo apt install libopenblas-dev build-essential cmake -y
         chmod +x ./compile_all.sh
         ./compile_all.sh -i -n 2
-    -name: ctest
-    run: ctest --output-on-failure -j2 
+    - name: ctest
+      run: ctest --output-on-failure -j2 
