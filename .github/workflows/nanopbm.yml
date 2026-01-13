@@ -19,4 +19,6 @@ jobs:
         chmod +x ./compile_all.sh
         ./compile_all.sh -i -n 2
     - name: ctest
-      run: ctest --output-on-failure -j2 
+      run: |
+        cd build
+        ctest --output-on-failure -j2 
