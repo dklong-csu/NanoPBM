@@ -2,8 +2,6 @@
 #define NANOPBM_REACTION_NETWORK_H
 
 
-namespace NanoPBM {
+namespace NanoPBM {}
 
-}
-
-#endif // NANOPBM_REACTION_NETWORK_H
+#endif  // NANOPBM_REACTION_NETWORK_H
