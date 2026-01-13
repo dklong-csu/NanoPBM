@@ -4,3 +4,6 @@
 [submodule "ginkgo"]
 	path = ginkgo
 	url = https://github.com/ginkgo-project/ginkgo
+[submodule "ut"]
+	path = ut
+	url = https://github.com/boost-ext/ut.git
