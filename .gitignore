@@ -44,3 +44,6 @@
 build/*
 dependencies/*
 
+# CMake files
+.cache/*
+compile_commands.json
