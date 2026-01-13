@@ -44,7 +44,7 @@ struct ChemicalReactionParameters {
 
 
 template <sunindextype n_reactants, sunindextype n_products, typename RxnProgress>
-class ChemicalReaction {
+class ChemicalReaction : ChemicalReactionBase {
  public:
   ChemicalReaction(const ChemicalReactionParameters<n_reactants, n_products>& parameters,
                    const RxnProgress& rxn_progress_fcn)
