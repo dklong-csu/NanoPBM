@@ -63,7 +63,6 @@ target_link_libraries(libNanoPBM
     SUNDIALS::core
     SUNDIALS::cvode
     SUNDIALS::nvecserial
-    # SUNDIALS::nvecopenmp
     SUNDIALS::sunmatrixdense
     SUNDIALS::sunmatrixsparse
     SUNDIALS::sunlinsoldense
