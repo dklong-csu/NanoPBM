@@ -15,6 +15,7 @@ jobs:
       run: | 
         sudo apt update
         sudo apt install libopenblas-dev build-essential cmake -y
+        git submodule update --init --recursive
         chmod +x ./compile_all.sh
         ./compile_all.sh -i -n 2
     - name: ctest
