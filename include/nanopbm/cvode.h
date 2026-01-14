@@ -243,6 +243,8 @@ class CVODE {
     err_code = CVodeSetMaxErrTestFails(cvode_mem, settings.max_error_test_fails);
     check("CVodeSetMaxErrTestFails");
     // TODO: positivity enforcement
+    cvode_constraints = N_VClone(initial_condition);
+    N_VConst(1.0, cvode_constraints);
     err_code = CVodeSetConstraints(cvode_mem, cvode_constraints);
     check("CVodeSetConstraints");
 
