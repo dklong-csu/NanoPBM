@@ -17,8 +17,6 @@
 #include "nanopbm/reaction_progress.h"
 
 
-
-
 int main() {
   try {
     sundials::Context sunctx;
