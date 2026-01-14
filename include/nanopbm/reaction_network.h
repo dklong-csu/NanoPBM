@@ -7,10 +7,11 @@
 #include "nanopbm/chemical_reaction.h"
 
 namespace NanoPBM {
-class ReactionNetwork : ChemicalReactionBase {
+class ReactionNetwork : public ChemicalReactionBase {
  public:
-  void add_reaction(const ChemicalReactionBase& rxn) {
-    reactions.push_back(std::make_shared<ChemicalReactionBase>(&rxn));
+  template <typename RxnType>
+  void add_reaction(const RxnType& rxn) {
+    reactions.push_back(std::make_unique<RxnType>(rxn));
   }
 
   void add_to_rhs(const N_Vector y, N_Vector rhs) const override {
@@ -32,7 +33,7 @@ class ReactionNetwork : ChemicalReactionBase {
   }
 
  private:
-  std::vector<std::shared_ptr<ChemicalReactionBase>> reactions;
+  std::vector<std::unique_ptr<ChemicalReactionBase>> reactions;
 };
 }  // namespace NanoPBM
 
