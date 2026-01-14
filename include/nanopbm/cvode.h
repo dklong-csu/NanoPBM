@@ -135,7 +135,7 @@ inline void check_cvode_error(const int err_code, const std::string& calling_fun
 
 struct CVODESettings {
   sunrealtype start_time = 0.0;
-  sunrealtype reltol     = 1.e-4;
+  sunrealtype reltol     = 1.e-6;
   sunrealtype abstol     = 1.e-8;
 
   // ---- Linear solver ----
