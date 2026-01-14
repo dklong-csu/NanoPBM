@@ -26,9 +26,9 @@ struct ChemicalReactionParameters {
   ChemicalReactionParameters(std::array<sunindextype, n_reactants> r_indices,
                              std::array<sunrealtype, n_reactants> r_stoich,
                              std::array<sunrealtype, n_reactants> r_order,
-                             std::array<sunindextype, n_reactants> p_indices,
-                             std::array<sunrealtype, n_reactants> p_stoich,
-                             std::array<sunrealtype, n_reactants> p_order = {0})
+                             std::array<sunindextype, n_products> p_indices,
+                             std::array<sunrealtype, n_products> p_stoich,
+                             std::array<sunrealtype, n_products> p_order = std::array<sunrealtype, n_products>{})
       : reactant_indices(r_indices),
         reactant_stoich(r_stoich),
         reactant_order(r_order),
@@ -39,7 +39,7 @@ struct ChemicalReactionParameters {
 
   std::array<sunindextype, n_reactants> reactant_indices;
   std::array<sunrealtype, n_reactants> reactant_stoich, reactant_order;
-  std::array<sunindextype, n_reactants> product_indices;
+  std::array<sunindextype, n_products> product_indices;
   std::array<sunrealtype, n_products> product_stoich, product_order;
 };
 
@@ -173,7 +173,7 @@ class ChemicalReaction : public ChemicalReactionBase {
  private:
   const std::array<sunindextype, n_reactants> reactant_indices;
   const std::array<sunrealtype, n_reactants> reactant_stoich, reactant_order;
-  const std::array<sunindextype, n_reactants> product_indices;
+  const std::array<sunindextype, n_products> product_indices;
   const std::array<sunrealtype, n_products> product_stoich, product_order;
 
   const RxnProgress rxn_rate;
@@ -268,7 +268,7 @@ class IrreversibleChemicalReaction : public ChemicalReactionBase {
  private:
   const std::array<sunindextype, n_reactants> reactant_indices;
   const std::array<sunrealtype, n_reactants> reactant_stoich, reactant_order;
-  const std::array<sunindextype, n_reactants> product_indices;
+  const std::array<sunindextype, n_products> product_indices;
   const std::array<sunrealtype, n_products> product_stoich;
 
   const RxnProgress rxn_rate;
