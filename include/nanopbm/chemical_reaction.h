@@ -14,9 +14,10 @@ namespace NanoPBM {
 
 class ChemicalReactionBase {
  public:
-  virtual void add_to_rhs(const N_Vector y, N_Vector rhs) const     = 0;
-  virtual void add_to_jacobian(const N_Vector y, SUNMatrix J) const = 0;
-  virtual void make_jacobian_sparsity(SUNMatrix J) const            = 0;
+  virtual void add_to_rhs(const N_Vector y, N_Vector rhs) const {}
+  virtual void add_to_jacobian(const N_Vector y, SUNMatrix J) const {};
+  virtual void make_jacobian_sparsity(SUNMatrix J) const {};
+  virtual ~ChemicalReactionBase() = default;
 };
 
 template <sunindextype n_reactants, sunindextype n_products>
@@ -27,7 +28,7 @@ struct ChemicalReactionParameters {
                              std::array<sunrealtype, n_reactants> r_order,
                              std::array<sunindextype, n_reactants> p_indices,
                              std::array<sunrealtype, n_reactants> p_stoich,
-                             std::array<sunrealtype, n_reactants> p_order)
+                             std::array<sunrealtype, n_reactants> p_order = {0})
       : reactant_indices(r_indices),
         reactant_stoich(r_stoich),
         reactant_order(r_order),
@@ -44,7 +45,7 @@ struct ChemicalReactionParameters {
 
 
 template <sunindextype n_reactants, sunindextype n_products, typename RxnProgress>
-class ChemicalReaction : ChemicalReactionBase {
+class ChemicalReaction : public ChemicalReactionBase {
  public:
   ChemicalReaction(const ChemicalReactionParameters<n_reactants, n_products>& parameters,
                    const RxnProgress& rxn_progress_fcn)
@@ -180,7 +181,7 @@ class ChemicalReaction : ChemicalReactionBase {
 
 
 template <sunindextype n_reactants, sunindextype n_products, typename RxnProgress>
-class IrreversibleChemicalReaction : ChemicalReactionBase {
+class IrreversibleChemicalReaction : public ChemicalReactionBase {
  public:
   IrreversibleChemicalReaction(
       const ChemicalReactionParameters<n_reactants, n_products>& parameters,
