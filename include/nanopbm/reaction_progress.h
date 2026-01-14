@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 namespace NanoPBM {
+
 template <sunindextype n_reactants, sunindextype n_products>
 class ConstantReversibleReactionProgress {
  public:
@@ -85,6 +86,38 @@ class ConstantReversibleReactionProgress {
 
  private:
   const sunrealtype kf, kb;
+};
+
+template <sunindextype n_reactants, sunindextype n_products>
+class ConstantIrreversibleReactionProgress {
+ public:
+  ConstantIrreversibleReactionProgress(const sunrealtype kf)
+      : rxn_progress(ConstantReversibleReactionProgress<n_reactants, n_products>{kf, 0}) {}
+
+  sunrealtype forward(const N_Vector y, const std::array<sunindextype, n_reactants>& indices,
+                      const std::array<sunrealtype, n_reactants>& orders) const {
+    return rxn_progress.forward(y, indices, orders);
+  }
+
+  std::array<sunrealtype, n_reactants> forward_derivatives(
+      const N_Vector y, const std::array<sunindextype, n_reactants>& indices,
+      const std::array<sunrealtype, n_reactants>& orders) const {
+    return rxn_progress.forward_derivatives(y, indices, orders);
+  }
+
+  sunrealtype backward(const N_Vector y, const std::array<sunindextype, n_products>& indices,
+                       const std::array<sunrealtype, n_products>& orders) const {
+    return 0;
+  }
+
+  std::array<sunrealtype, n_products> backward_derivatives(
+      const N_Vector y, const std::array<sunindextype, n_products>& indices,
+      const std::array<sunrealtype, n_products>& orders) const {
+    return std::array<sunrealtype, n_products>{};
+  }
+
+ private:
+  ConstantReversibleReactionProgress<n_reactants, n_products> rxn_progress;
 };
 }  // namespace NanoPBM
 

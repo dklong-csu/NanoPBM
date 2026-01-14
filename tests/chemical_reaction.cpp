@@ -8,6 +8,7 @@
 
 #include <boost/ut.hpp>
 #include <sundials/sundials_context.hpp>
+#include <vector>
 
 #include "reaction_progress.h"
 
@@ -99,6 +100,55 @@ int main() {
     };
     N_VDestroy(v);
     N_VDestroy(vdot);
+    SUNMatDestroy(M);
+  };
+
+  "IrreversibleChemicalReaction"_test = [&] {
+    const sunindextype n_odes = 2;
+    N_Vector v                = N_VNew_Serial(n_odes, sunctx);
+    N_Vector vdot             = N_VClone(v);
+    N_Vector vdot_expected    = N_VClone(vdot);
+    auto v_data               = N_VGetArrayPointer(v);
+    auto vdot_data            = N_VGetArrayPointer(vdot);
+    auto vdot_expected_data   = N_VGetArrayPointer(vdot_expected);
+
+    SUNMatrix M          = SUNDenseMatrix(n_odes, n_odes, sunctx);
+    SUNMatrix M_expected = SUNDenseMatrix(n_odes, n_odes, sunctx);
+
+    "Rates"_test = [&](const auto rate) {
+      "Concentrations"_test = [&](const auto& conc) {
+        N_VConst(0, vdot);
+        N_VConst(0, vdot_expected);
+        SUNMatZero(M);
+        SUNMatZero(M_expected);
+        v_data[0] = conc[0];
+        v_data[1] = conc[1];
+
+        ConstantReversibleReactionProgress<1, 1> rxn_rate(rate, 0);
+        ChemicalReactionParameters<1, 1> prm({0}, {1}, {1}, {1}, {1}, {1});
+        const ChemicalReaction rev_rxn(prm, rxn_rate);
+
+        ConstantIrreversibleReactionProgress<1, 1> irr_rxn_rate(rate);
+        const IrreversibleChemicalReaction irr_rxn(prm, irr_rxn_rate);
+
+        irr_rxn.add_to_rhs(v, vdot);
+        rev_rxn.add_to_rhs(v, vdot_expected);
+        expect(vdot_data[0] == _d(vdot_expected_data[0]));
+        expect(vdot_data[1] == _d(vdot_expected_data[1]));
+
+        irr_rxn.add_to_jacobian(v, M);
+        rev_rxn.add_to_jacobian(v, M_expected);
+        expect(SM_ELEMENT_D(M, 0, 0) == _d(SM_ELEMENT_D(M_expected, 0, 0)));
+        expect(SM_ELEMENT_D(M, 0, 1) == _d(SM_ELEMENT_D(M_expected, 0, 1)));
+        expect(SM_ELEMENT_D(M, 1, 0) == _d(SM_ELEMENT_D(M_expected, 1, 0)));
+        expect(SM_ELEMENT_D(M, 1, 1) == _d(SM_ELEMENT_D(M_expected, 1, 1)));
+      } | std::vector<std::array<sunrealtype, 2>>{{1, 0}, {0, 1}, {1, 1}, {10, 0.1}};
+    } | std::vector<sunrealtype>{1};
+
+
+    N_VDestroy(v);
+    N_VDestroy(vdot);
+    N_VDestroy(vdot_expected);
     SUNMatDestroy(M);
   };
 }
