@@ -11,7 +11,7 @@ class ReactionNetwork : public ChemicalReactionBase {
  public:
   template <typename RxnType>
   void add_reaction(const RxnType& rxn) {
-    reactions.push_back(std::make_unique<RxnType>(rxn));
+    reactions.push_back(std::make_shared<RxnType>(rxn));
   }
 
   void add_to_rhs(const N_Vector y, N_Vector rhs) const override {
@@ -33,7 +33,7 @@ class ReactionNetwork : public ChemicalReactionBase {
   }
 
  private:
-  std::vector<std::unique_ptr<ChemicalReactionBase>> reactions;
+  std::vector<std::shared_ptr<ChemicalReactionBase>> reactions;
 };
 }  // namespace NanoPBM
 
