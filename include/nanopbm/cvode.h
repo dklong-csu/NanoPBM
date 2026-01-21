@@ -2,27 +2,34 @@
 #define NANOPBM_CVODE_H
 
 #include <cvode/cvode.h>
+#include <cvode/cvode_bandpre.h>
+#include <cvode/cvode_bbdpre.h>
 #include <cvode/cvode_ls.h>
 #include <nvector/nvector_serial.h>
 #include <sundials/sundials_core.h>
+#include <sundials/sundials_iterative.h>
 #include <sundials/sundials_linearsolver.h>
 #include <sundials/sundials_matrix.h>
 #include <sundials/sundials_nvector.h>
 #include <sundials/sundials_types.h>
 #include <sunlinsol/sunlinsol_lapackdense.h>
+#include <sunlinsol/sunlinsol_spbcgs.h>
+#include <sunlinsol/sunlinsol_spgmr.h>
+#include <sunlinsol/sunlinsol_sptfqmr.h>
 #include <sunmatrix/sunmatrix_dense.h>
+#include <sunmatrix/sunmatrix_sparse.h>
 
-#include <cstdio>
-#include <fstream>
+#include <algorithm>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <sundials/sundials_context.hpp>
-#include <vector>
+
+#include "ode_contribution.h"
 
 namespace NanoPBM {
 
-enum class MatrixTypes { DENSE };
-enum class LinearSolverTypes { LAPACK };
+enum class LinearAlgebraType { LAPACK, SUNDIALSSPARSE, GINKGO };
 
 // FIXME: make this not be inline
 inline void check_cvode_error(const int err_code, const std::string& calling_function,
@@ -139,9 +146,9 @@ struct CVODESettings {
   sunrealtype abstol     = 1.e-8;
 
   // ---- Linear solver ----
-  sunbooleantype matrix_free = false;
-  MatrixTypes matrix_type    = MatrixTypes::DENSE;
-  LinearSolverTypes ls_type  = LinearSolverTypes::LAPACK;
+  std::string linear_solver       = "direct";
+  std::string preconditioner_type = "none";
+  int max_linear_iterations       = 30;
 
   // ---- Optional CVODE settings ----
   int max_order                          = 5;
@@ -163,121 +170,57 @@ struct CVODESettings {
 };
 
 
-template <typename RHSFcn, typename JacFcn, int METHOD = CV_BDF>
+// FIXME: always use BDF?
+template <int METHOD = CV_BDF>
 class CVODE {
  private:
-  struct CVODEUserData {
-    RHSFcn rhs;
-    JacFcn jac;
-  };
-
  public:
   CVODE() = delete;
 
-  CVODE(const sundials::Context& sunctx, N_Vector initial_condition, const RHSFcn& rhs,
-        const JacFcn& jac, const CVODESettings& settings = CVODESettings{})
-      : rhs(rhs), jac(jac), settings(settings) {
+  template <typename ContributionType>
+    requires std::derived_from<ContributionType, OdeContribution>
+  CVODE(const sundials::Context& sunctx, N_Vector initial_condition,
+        const ContributionType& ode_contribution, const CVODESettings& settings = CVODESettings{})
+      : ode_model(std::make_shared<ContributionType>(ode_contribution)), settings(settings) {
     int err_code     = 0;
     const auto check = [&](const std::string& fcn_name) {
       check_cvode_error(err_code, "CVODE constructor", fcn_name);
     };
 
-    // ---- Basic setup of CVODE ----
-    cvode_mem = CVodeCreate(METHOD, sunctx);
+    make_cvode_functions();
 
-    cvode_rhs_fcn = [](sunrealtype t, N_Vector y, N_Vector ydot, void* user_data) {
-      const CVODEUserData* fcns = static_cast<CVODEUserData*>(user_data);
-      N_VConst(0, ydot);
-      return fcns->rhs(t, y, ydot);
-    };
-    err_code = CVodeInit(cvode_mem, cvode_rhs_fcn, settings.start_time, initial_condition);
-    // TODO:
+    cvode_mem = CVodeCreate(METHOD, sunctx);
+    err_code  = CVodeInit(cvode_mem, cvode_rhs_fcn, settings.start_time, initial_condition);
     check("CVodeInit");
 
-    // TODO: logic to vary the tolerance function called
-    err_code = CVodeSStolerances(cvode_mem, settings.reltol, settings.abstol);
-    check("CVodeSStolerances");
-
-    // Create a template matrix for the linear solver.
-    // TODO: It can remain as a nullptr if a matrix free method is used.
     n_odes = N_VGetLength(initial_condition);
-    // TODO: logic for other matrix types
-    template_matrix = SUNDenseMatrix(n_odes, n_odes, sunctx);
-    SUNMatZero(template_matrix);
-    // TODO: logic for other solver types
-    linear_solver = SUNLinSol_LapackDense(initial_condition, template_matrix, sunctx);
 
-    err_code = CVodeSetLinearSolver(cvode_mem, linear_solver, template_matrix);
-    check("CVodeSetLinearSolver");
-    // TODO: optional arguments for linear solver
 
-    // ---- Optional CVODE settings ----
-    user_data.rhs = rhs;
-    user_data.jac = jac;
-    err_code      = CVodeSetUserData(cvode_mem, static_cast<void*>(&user_data));
+    make_linear_solver(sunctx, initial_condition);
+    apply_settings();
+
+    err_code = CVodeSetUserData(cvode_mem, static_cast<void*>(&ode_model));
     check("CVodeSetUserData");
 
-    // Monitor the solution and do something at predefined intervals
-    // TODO
-
-    err_code = CVodeSetMaxOrd(cvode_mem, settings.max_order);
-    check("CVodeSetMaxOrd");
-    err_code = CVodeSetMaxNumSteps(cvode_mem, settings.max_n_steps);
-    check("CVodeSetMaxNumSteps");
-    err_code = CVodeSetMaxHnilWarns(cvode_mem, settings.max_n_hstep_msgs);
-    check("CVodeSetMaxHnilWarns");
-    err_code = CVodeSetStabLimDet(cvode_mem, settings.set_stability_detection);
-    check("CVodeSetStabLimDet");
-    err_code = CVodeSetInitStep(cvode_mem, settings.initial_delta_t);
-    check("CVodeSetInitStep");
-    err_code = CVodeSetMinStep(cvode_mem, settings.min_delta_t);
-    check("CVodeSetMinStep");
-    err_code = CVodeSetMaxStep(cvode_mem, settings.max_delta_t);
-    check("CVodeSetMaxStep");
-    if (settings.stop_time > 0.0) {
-      err_code = CVodeSetStopTime(cvode_mem, settings.stop_time);
-      check("CVodeSetStopTime");
-    }
-    err_code = CVodeSetInterpolateStopTime(cvode_mem, settings.interp_stop_time);
-    check("CVodeSetInterpolateStopTime");
-    err_code = CVodeSetMaxErrTestFails(cvode_mem, settings.max_error_test_fails);
-    check("CVodeSetMaxErrTestFails");
     // TODO: positivity enforcement
     cvode_constraints = N_VClone(initial_condition);
     N_VConst(1.0, cvode_constraints);
     err_code = CVodeSetConstraints(cvode_mem, cvode_constraints);
     check("CVodeSetConstraints");
-
-    // ---- Optional CVODE settings for linear solver interface ----
-    err_code = CVodeSetDeltaGammaMaxLSetup(cvode_mem, settings.max_gamma_change);
-    check("CVodeSetDeltaGammaMaxLSetup");
-    err_code = CVodeSetDeltaGammaMaxBadJac(cvode_mem, settings.max_gamma_jac_update);
-    check("CVodeSetDeltaGammaMaxBadJac");
-    err_code = CVodeSetLSetupFrequency(cvode_mem, settings.linear_solver_setup_frequency);
-    check("CVodeSetLSetupFrequency");
-    err_code = CVodeSetJacEvalFrequency(cvode_mem, settings.jacobian_eval_frequency);
-    check("CVodeSetJacEvalFrequency");
-
-    cvode_jac_fcn = [](sunrealtype t, N_Vector y, N_Vector ydot, SUNMatrix Jac, void* user_data,
-                       N_Vector tmp1, N_Vector tmp2, N_Vector tmp3) {
-      const CVODEUserData* fcns = static_cast<CVODEUserData*>(user_data);
-      SUNMatZero(Jac);
-      return fcns->jac(t, y, ydot, Jac, tmp1, tmp2, tmp3);
-    };
-    err_code = CVodeSetJacFn(cvode_mem, cvode_jac_fcn);
-    check("CVodeSetJacFn");
-    // TODO: if doing matrix free solver, call appropriate functions
-
-
-    // ---- Nonlinear solver ----
-    // TODO: do nothing right now -> this means Newton method is used -> good default
   }
 
   ~CVODE() {
-    out_file.close();
     N_VDestroy(cvode_constraints);
-    SUNLinSolFree(linear_solver);
-    SUNMatDestroy(template_matrix);
+    if (cvode_constraints != nullptr) {
+      // N_VDestroy(cvode_constraints);
+    }
+    if (linear_solver != nullptr) {
+      SUNLinSolFree(linear_solver);
+    }
+
+    if (template_matrix != nullptr) {
+      SUNMatDestroy(template_matrix);
+    }
     CVodeFree(&cvode_mem);
   }
 
@@ -286,22 +229,6 @@ class CVODE {
     check_cvode_error(err_code, "CVODE::solve()", "CVode");
   }
 
-  void save_solution(const sunrealtype time, N_Vector solution) {
-    if (outfile_initialized) {
-      out_file.open(filename, std::ios::app);
-      out_file << time << ",";
-      const auto size = N_VGetLength(solution);
-      const auto data = N_VGetArrayPointer(solution);
-      for (sunindextype i = 0; i < size; ++i) {
-        out_file << data[i];
-        if (i < size - 1) {
-          out_file << ",";
-        }
-      }
-      out_file << "\n";
-      out_file.close();
-    }
-  }
 
   void print_statistics(const SUNOutputFormat fmt = SUN_OUTPUTFORMAT_TABLE) {
     CVodePrintAllStats(cvode_mem, stdout, fmt);
@@ -316,48 +243,229 @@ class CVODE {
     fclose(fptr);
   }
 
-  void register_data_interpretation(const std::vector<std::string>& names) {
-    component_names = names;
-  }
-
-  void prepare_outfile(const std::string& output_filename) {
-    filename = output_filename;
-    out_file = std::ofstream(filename, std::ios::out);
-    out_file << "time,";
-    for (sunindextype i = 0; i < n_odes; ++i) {
-      out_file << component_names[i];
-      if (i < n_odes - 1) {
-        out_file << ",";
-      }
-    }
-    out_file << "\n";
-    out_file.close();
-    outfile_initialized = true;
-  }
-
 
  private:
+  std::shared_ptr<OdeContribution> ode_model;
   void* cvode_mem = nullptr;
 
-  const RHSFcn rhs;
-  const JacFcn jac;
-  const CVODESettings settings;
+  CVODESettings settings;
   int (*cvode_rhs_fcn)(sunrealtype, N_Vector, N_Vector, void*);
   int (*cvode_jac_fcn)(sunrealtype, N_Vector, N_Vector, SUNMatrix, void*, N_Vector, N_Vector,
                        N_Vector);
-  CVODEUserData user_data;
+  int (*cvode_jac_times_v_fcn)(N_Vector, N_Vector, sunrealtype, N_Vector, N_Vector, void*,
+                               N_Vector);
 
   SUNMatrix template_matrix     = nullptr;
   SUNLinearSolver linear_solver = nullptr;
   N_Vector cvode_constraints    = nullptr;
 
   sunindextype n_odes = 0;
-  std::vector<std::string> component_names;
-  std::ofstream out_file;
-  std::string filename;
-  bool outfile_initialized = false;
+
+  void make_cvode_functions();
+  void make_linear_solver(const sundials::Context& sunctx, N_Vector initial_condition);
+  void make_dense_solver(const sundials::Context& sunctx, N_Vector initial_condition);
+  void make_iterative_solver(const sundials::Context& sunctx, N_Vector initial_condition);
+  void apply_settings();
 };
 
+
+template <int METHOD>
+void CVODE<METHOD>::make_cvode_functions() {
+  cvode_rhs_fcn = [](sunrealtype t, N_Vector y, N_Vector ydot, void* user_data) {
+    std::shared_ptr<OdeContribution> fcns =
+        *static_cast<std::shared_ptr<OdeContribution>*>(user_data);
+    N_VConst(0, ydot);
+    fcns->add_to_rhs(t, y, ydot);
+    return 0;
+  };
+
+  cvode_jac_fcn = [](sunrealtype t, N_Vector y, N_Vector ydot, SUNMatrix Jac, void* user_data,
+                     N_Vector tmp1, N_Vector tmp2, N_Vector tmp3) {
+    std::shared_ptr<OdeContribution> fcns =
+        *static_cast<std::shared_ptr<OdeContribution>*>(user_data);
+    SUNMatZero(Jac);
+    // FIXME:
+    gko::matrix_data<sunrealtype, sunindextype> matrix_data;
+    fcns->add_to_jac(matrix_data, t, y, ydot, tmp1, tmp2, tmp3);
+    for (const auto& data : matrix_data.nonzeros) {
+      SM_ELEMENT_D(Jac, data.row, data.column) = data.value;
+    }
+    return 0;
+  };
+
+  cvode_jac_times_v_fcn = [](N_Vector v, N_Vector Jv, sunrealtype t, N_Vector y, N_Vector fy,
+                             void* user_data, N_Vector tmp) {
+    std::shared_ptr<OdeContribution> fcns =
+        *static_cast<std::shared_ptr<OdeContribution>*>(user_data);
+    N_VConst(0, Jv);
+    fcns->add_to_jac_times_v(v, Jv, t, y, fy, tmp);
+    return 0;
+  };
+}
+
+template <int METHOD>
+void CVODE<METHOD>::make_dense_solver(const sundials::Context& sunctx, N_Vector initial_condition) {
+  int err_code     = 0;
+  const auto check = [&](const std::string& fcn_name) {
+    check_cvode_error(err_code, "CVODE constructor", fcn_name);
+  };
+
+  template_matrix = SUNDenseMatrix(n_odes, n_odes, sunctx);
+  SUNMatZero(template_matrix);
+  linear_solver = SUNLinSol_LapackDense(initial_condition, template_matrix, sunctx);
+
+  err_code = CVodeSetLinearSolver(cvode_mem, linear_solver, template_matrix);
+  check("CVodeSetLinearSolver");
+  err_code = CVodeSetJacFn(cvode_mem, cvode_jac_fcn);
+  check("CVodeSetJacFn");
+}
+
+
+template <int METHOD>
+void CVODE<METHOD>::make_iterative_solver(const sundials::Context& sunctx,
+                                          N_Vector initial_condition) {
+  int err_code     = 0;
+  const auto check = [&](const std::string& fcn_name) {
+    check_cvode_error(err_code, "CVODE constructor", fcn_name);
+  };
+
+  const int max_iter       = settings.max_linear_iterations;
+  int preconditioning_type = SUN_PREC_NONE;
+  if (settings.preconditioner_type == "none") {
+    preconditioning_type = SUN_PREC_NONE;
+  } else if (settings.preconditioner_type == "right") {
+    preconditioning_type = SUN_PREC_RIGHT;
+  } else if (settings.preconditioner_type == "left") {
+    preconditioning_type = SUN_PREC_LEFT;
+  } else {
+    const std::string border =
+        "----------------------------------------------------------------------------\n";
+    std::string err_msg = border;
+    err_msg += "  [CVODE] -> [make_iterative_solver]\n";
+    err_msg += "    Error: Invalid preconditioning type specified.\n";
+    err_msg += "    Additional details:\n";
+    err_msg += "      Provided setting: " + settings.preconditioner_type + "\n";
+    err_msg += "      Valid options   : none, right, left\n";
+    err_msg += border;
+    throw std::runtime_error(err_msg);
+  }
+  if (settings.linear_solver == "gmres") {
+    linear_solver = SUNLinSol_SPGMR(initial_condition, preconditioning_type, max_iter, sunctx);
+    // FIXME
+    SUNLinSol_SPGMRSetGSType(linear_solver, SUN_MODIFIED_GS);
+    // FIXME
+    SUNLinSol_SPGMRSetMaxRestarts(linear_solver, -1);
+
+  } else if (settings.linear_solver == "bicgstab") {
+    linear_solver = SUNLinSol_SPBCGS(initial_condition, preconditioning_type, max_iter, sunctx);
+  } else if (settings.linear_solver == "tfqmr") {
+    linear_solver = SUNLinSol_SPTFQMR(initial_condition, preconditioning_type, max_iter, sunctx);
+  } else {
+    const std::string border =
+        "----------------------------------------------------------------------------\n";
+    std::string err_msg = border;
+    err_msg += "  [CVODE] -> [make_iterative_solver]\n";
+    err_msg += "    Error: Invalid iterative solver specified.\n";
+    err_msg += "    Additional details:\n";
+    err_msg += "      Provided setting: " + settings.linear_solver + "\n";
+    err_msg += "      Valid options   : GMRES, BICGSTAB, TFQMR\n";
+    err_msg += border;
+    throw std::runtime_error(err_msg);
+  }
+
+
+  err_code = CVodeSetLinearSolver(cvode_mem, linear_solver, template_matrix);
+  check("CVodeSetLinearSolver");
+  err_code = CVodeSetJacTimes(cvode_mem, nullptr, cvode_jac_times_v_fcn);
+  check("CVodeSetJacTimes");
+
+  // FIXME: add logic for GINKGO preconditioner
+  if (preconditioning_type != SUN_PREC_NONE) {
+    // Use SUNDIALS preconditioner
+    const int upper_bandwidth = 1;
+    const int lower_bandwidth = 1;
+    err_code                  = CVBandPrecInit(cvode_mem, n_odes, upper_bandwidth, lower_bandwidth);
+  }
+}
+
+template <int METHOD>
+void CVODE<METHOD>::make_linear_solver(const sundials::Context& sunctx,
+                                       N_Vector initial_condition) {
+  // make solver name lowercase for robustness
+  std::transform(settings.linear_solver.begin(), settings.linear_solver.end(),
+                 settings.linear_solver.begin(), [](unsigned char c) { return std::tolower(c); });
+
+  std::transform(settings.preconditioner_type.begin(), settings.preconditioner_type.end(),
+                 settings.preconditioner_type.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+
+
+  if (settings.linear_solver == "direct") {
+    make_dense_solver(sunctx, initial_condition);
+  } else {
+    make_iterative_solver(sunctx, initial_condition);
+  }
+  return;
+}
+
+
+template <int METHOD>
+void CVODE<METHOD>::apply_settings() {
+  int err_code     = 0;
+  const auto check = [&](const std::string& fcn_name) {
+    check_cvode_error(err_code, "CVODE constructor", fcn_name);
+  };
+
+
+  // TODO: logic to vary the tolerance function called
+  err_code = CVodeSStolerances(cvode_mem, settings.reltol, settings.abstol);
+  check("CVodeSStolerances");
+
+
+  // Monitor the solution and do something at predefined intervals
+  // TODO
+
+  err_code = CVodeSetMaxOrd(cvode_mem, settings.max_order);
+  check("CVodeSetMaxOrd");
+  err_code = CVodeSetMaxNumSteps(cvode_mem, settings.max_n_steps);
+  check("CVodeSetMaxNumSteps");
+  err_code = CVodeSetMaxHnilWarns(cvode_mem, settings.max_n_hstep_msgs);
+  check("CVodeSetMaxHnilWarns");
+  err_code = CVodeSetStabLimDet(cvode_mem, settings.set_stability_detection);
+  check("CVodeSetStabLimDet");
+  err_code = CVodeSetInitStep(cvode_mem, settings.initial_delta_t);
+  check("CVodeSetInitStep");
+  err_code = CVodeSetMinStep(cvode_mem, settings.min_delta_t);
+  check("CVodeSetMinStep");
+  err_code = CVodeSetMaxStep(cvode_mem, settings.max_delta_t);
+  check("CVodeSetMaxStep");
+  if (settings.stop_time > 0.0) {
+    err_code = CVodeSetStopTime(cvode_mem, settings.stop_time);
+    check("CVodeSetStopTime");
+  }
+  err_code = CVodeSetInterpolateStopTime(cvode_mem, settings.interp_stop_time);
+  check("CVodeSetInterpolateStopTime");
+  err_code = CVodeSetMaxErrTestFails(cvode_mem, settings.max_error_test_fails);
+  check("CVodeSetMaxErrTestFails");
+
+
+  // ---- Optional CVODE settings for linear solver interface ----
+  err_code = CVodeSetDeltaGammaMaxLSetup(cvode_mem, settings.max_gamma_change);
+  check("CVodeSetDeltaGammaMaxLSetup");
+  err_code = CVodeSetDeltaGammaMaxBadJac(cvode_mem, settings.max_gamma_jac_update);
+  check("CVodeSetDeltaGammaMaxBadJac");
+  err_code = CVodeSetLSetupFrequency(cvode_mem, settings.linear_solver_setup_frequency);
+  check("CVodeSetLSetupFrequency");
+  err_code = CVodeSetJacEvalFrequency(cvode_mem, settings.jacobian_eval_frequency);
+  check("CVodeSetJacEvalFrequency");
+
+
+  // TODO: if doing matrix free solver, call appropriate functions
+
+
+  // ---- Nonlinear solver ----
+  // TODO: do nothing right now -> this means Newton method is used -> good default
+}
 
 }  // namespace NanoPBM
 
