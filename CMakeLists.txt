@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 
 project(
     NanoPBM
-    LANGUAGES CXX
+    LANGUAGES CXX C
 )
 
 message(STATUS "Installing NanoPBM" )
@@ -23,7 +23,16 @@ if(PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
 endif()
 
 
-# ---- Install SUNDIALS ----
+# ---- Install YAML Input File Parser ----
+include(FetchContent)
+
+FetchContent_Declare(
+  yaml-cpp
+  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+  GIT_TAG master # Can be a tag (yaml-cpp-x.x.x), a commit hash, or a branch name (master)
+)
+FetchContent_MakeAvailable(yaml-cpp)
+
 
 
 
@@ -43,7 +52,11 @@ NAMES SUNDIALS
 REQUIRED
 )
 
-find_package(OpenMP REQUIRED)
+find_package(Ginkgo REQUIRED)
+
+find_package(OpenMP REQUIRED COMPONENTS C CXX)
+
+find_package(HDF5 REQUIRED COMPONENTS C CXX)
 if (OpenMP_CXX_FOUND)
     message(STATUS Found OpenMP)
     target_link_libraries(libNanoPBM
@@ -52,11 +65,14 @@ if (OpenMP_CXX_FOUND)
     SUNDIALS::core
     SUNDIALS::cvode
     SUNDIALS::nvecserial
-    # SUNDIALS::nvecopenmp
+    SUNDIALS::nvecopenmp
     SUNDIALS::sunmatrixdense
     SUNDIALS::sunmatrixsparse
     SUNDIALS::sunlinsoldense
-    SUNDIALS::sunlinsollapackdense)
+    SUNDIALS::sunlinsollapackdense
+    HDF5::HDF5 
+    yaml-cpp::yaml-cpp
+    Ginkgo::ginkgo)
 else ()
 target_link_libraries(libNanoPBM
     INTERFACE
@@ -66,7 +82,10 @@ target_link_libraries(libNanoPBM
     SUNDIALS::sunmatrixdense
     SUNDIALS::sunmatrixsparse
     SUNDIALS::sunlinsoldense
-    SUNDIALS::sunlinsollapackdense)
+    SUNDIALS::sunlinsollapackdense
+    HDF5::HDF5 
+    yaml-cpp::yaml-cpp
+    Ginkgo::ginkgo)
 endif()
 
 add_subdirectory(applications)
@@ -74,6 +93,9 @@ add_subdirectory(applications)
 # ---- Test suite ----
 enable_testing()
 add_subdirectory(tests)
+
+# ---- Documentation ----
+add_subdirectory(documentation)
 
 # ---- Make compile commands file for clangd ----
 message(STATUS "Creating compile_commands.json for the clangd language server.")
