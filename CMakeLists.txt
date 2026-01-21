@@ -95,7 +95,7 @@ enable_testing()
 add_subdirectory(tests)
 
 # ---- Documentation ----
-add_subdirectory(documentation)
+# add_subdirectory(documentation)
 
 # ---- Make compile commands file for clangd ----
 message(STATUS "Creating compile_commands.json for the clangd language server.")
