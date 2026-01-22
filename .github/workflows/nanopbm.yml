@@ -14,10 +14,10 @@ jobs:
     - name: install
       run: | 
         sudo apt update
-        sudo apt install libopenblas-dev build-essential cmake -y
+        sudo apt install libopenblas-dev libhdf5-dev build-essential cmake -y
         git submodule update --init --recursive
         chmod +x ./compile_all.sh
-        ./compile_all.sh -i -n 2
+        ./compile_all.sh -d -i -n 2
     - name: ctest
       run: |
         cd build

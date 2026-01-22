@@ -33,13 +33,15 @@ while getopts ":dwrn:ih" opt; do
         echo "---- Instructions: compile_all.sh ----"
         echo "Installs NanoPBM and required dependencies."
         echo 
-        echo "  Usage: compile_all.sh [-d] [-w] [-r] [-h]"
+        echo "  Usage: compile_all.sh [-d] [-w] [-r] [-h] [-i] [-n N]"
         echo 
         echo "  Options:"
         echo "    -d Builds in debug mode"
         echo "    -w Builds in release with debug information mode"
         echo "    -r Builds in release mode"
         echo "    -h Provides usage instructions"
+        echo "    -i Installs dependencies"
+        echo "    -n Uses N parallel jobs to speed up compilation"
         ;;
         \?)
         echo "Invalid option: -$OPTARG"
@@ -54,9 +56,34 @@ if [ $DO_BUILD -eq 0 ]; then
 echo "Building in mode: ${BUILD_TYPE}"
 echo "Building with ${N_BUILD_JOBS} jobs"
 
+mkdir -p dependencies
+
+# ---- Install Ginkgo ----
+mkdir -p dependencies/ginkgo
+mkdir -p dependencies/install/ginkgo
+
+GINKGO_SRC_DIR=${SCRIPT_DIR}/ginkgo
+GINKGO_BUILD_DIR=${SCRIPT_DIR}/dependencies/ginkgo
+GINKGO_INSTALL_DIR=${SCRIPT_DIR}/dependencies/install/ginkgo
+
+if [ $INSTALL_DEPENDENCIES -eq 0 ]; then 
+
+echo "---- Installing GINKGO ----"
+
+cmake -S ${GINKGO_SRC_DIR} \
+-B ${GINKGO_BUILD_DIR} \
+-D CMAKE_INSTALL_PREFIX=${GINKGO_INSTALL_DIR} \
+-D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
+-D GINKGO_MIXED_PRECISION=ON 
+cmake --build ${GINKGO_BUILD_DIR} -j ${N_BUILD_JOBS}
+cd ${GINKGO_BUILD_DIR}
+make install
+
+fi
+
+
 
 # ---- Install Sundials ----
-mkdir -p dependencies
 mkdir -p dependencies/sundials
 mkdir -p dependencies/install/sundials
 
@@ -78,10 +105,13 @@ cmake -S ${SUNDIALS_SRC_DIR} \
 -D BUILD_CVODES=OFF \
 -D BUILD_IDA=OFF \
 -D BUILD_IDAS=OFF \
--D EXAMPLES_ENABLE_CXX=ON \
+-D EXAMPLES_ENABLE_CXX=OFF \
+-D EXAMPLES_ENABLE_C=OFF \
+-D EXAMPLES_INSTALL=OFF \
 -D SUNDIALS_LOGGING_LEVEL=${SUNDIALS_LOGGING_LEVEL} \
 -D SUNDIALS_BUILD_WITH_MONITORING=ON \
--D CMAKE_CXX_STANDARD=20 
+-D CMAKE_CXX_STANDARD=20 \
+-D ENABLE_GINKGO=OFF 
 cd ${SUNDIALS_BUILD_DIR} 
 make -j ${N_BUILD_JOBS}
 make install
@@ -96,7 +126,8 @@ cd ${NANOPBM_BUILD_DIR}
 cmake -S ${SCRIPT_DIR} \
 -B ${NANOPBM_BUILD_DIR} \
 -D CMAKE_BUILD_TYPE=${BUILD_TYPE} \
--D SUNDIALS_DIR=${SUNDIALS_INSTALL_DIR}/lib/cmake/sundials
+-D SUNDIALS_DIR=${SUNDIALS_INSTALL_DIR}/lib/cmake/sundials \
+-D Ginkgo_DIR=${GINKGO_INSTALL_DIR}/lib/cmake/Ginkgo
 
 make -j ${N_BUILD_JOBS}
 
