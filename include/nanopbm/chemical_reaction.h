@@ -16,8 +16,8 @@ namespace NanoPBM {
 // FIXME: do these need parameters to calculate gibbs
 struct ReactionParameters {
   ReactionParameters() = default;
-  ReactionParameters(const sunindextype idx, const sunrealtype stoich,
-                     const sunrealtype reaction_order)
+  ReactionParameters(const sunindextype idx, const sunrealtype stoich = 1,
+                     const sunrealtype reaction_order = 1)
       : index(idx), stoich(stoich), order(reaction_order) {}
   sunindextype index;
   sunrealtype stoich;
