@@ -11,7 +11,7 @@
 
 #include "ode_contribution.h"
 namespace NanoPBM {
-class EMoM : OdeContribution {
+class EMoM : public OdeContribution {
  public:
   EMoM() = delete;
   EMoM(const sunindextype idx_mu0, const sunindextype idx_mu1, const sunindextype idx_mu2,
