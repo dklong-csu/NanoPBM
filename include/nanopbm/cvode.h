@@ -167,6 +167,8 @@ struct CVODESettings {
   sunrealtype max_gamma_jac_update       = -1;
   long int linear_solver_setup_frequency = 0;  // zero gives default
   long int jacobian_eval_frequency       = 0;
+  int prec_upper_bandwidth               = 1;
+  int prec_lower_bandwidth               = 1;
 };
 
 
@@ -382,8 +384,8 @@ void CVODE<METHOD>::make_iterative_solver(const sundials::Context& sunctx,
   // FIXME: add logic for GINKGO preconditioner
   if (preconditioning_type != SUN_PREC_NONE) {
     // Use SUNDIALS preconditioner
-    const int upper_bandwidth = 1;
-    const int lower_bandwidth = 1;
+    const int upper_bandwidth = settings.prec_upper_bandwidth;
+    const int lower_bandwidth = settings.prec_lower_bandwidth;
     err_code                  = CVBandPrecInit(cvode_mem, n_odes, upper_bandwidth, lower_bandwidth);
   }
 }
