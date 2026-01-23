@@ -1,0 +1,45 @@
+# Example input file for simulating an Iridium nanoparticle system
+# Based on the model in: https://doi.org/10.1002/jcc.26770
+---
+# Output is in HDF5 format so use either .h5 or .hdf5 as file extension
+Output file name: iridium_3step_out.hdf5
+
+# Particle size information
+Maximum number of atoms: 2500    # from paper: 2500
+Maximum small particle size: 107 # from paper: 107
+
+# Initial conditions
+Solvent concentration: 11.3           # from paper: 11.3
+Precursor initial condition: 0.0012   # from paper: 0.0012
+Ligand initial condition: 0           # from paper: 0
+Solvated complex initial condition: 0 # from paper: 0
+
+# Model choice  
+Mechanism: 3step # 3step or 4step
+Use emom: false  # true or false
+
+# Reaction rates
+kf to kb ratio: 5.e-7 # from paper: 5.e-7
+kb: 6.62e3            # from paper: 6.62e3
+k1: 1.24e5            # from paper: 1.24e5
+k2: 2.60e5            # from paper: 2.60e5
+k3: 6.22e3            # from paper: 6.22e3
+
+# When to output data
+Time step size: 0.1
+Number of time steps: 48
+
+# Vector data structure options
+N Vector type: serial # serial, openmp
+Number of threads: 1 # >=1
+
+# ODE solver options
+Linear solver type: gmres # direct, gmres, bicgstab, tfqmr
+Preconditioner type: left # none, left, right
+Preconditioner upper bandwidth: 1
+Preconditioner lower bandwidth: 1
+
+# Benchmarking: set to 1 if you just want to solve the ODE
+Number of runs: 10
+Output data: yes # yes or no
+...

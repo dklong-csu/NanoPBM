@@ -1,0 +1,22 @@
+---
+Executable path: /home/dannylong/programming/NanoPBM/build/applications/iridium_mechanistic
+Template input path: /home/dannylong/programming/NanoPBM/example_input_files/iridium_growth_4step.yaml
+Output directory: experiment/
+Parallel jobs: 1
+
+parameters:
+  - key: Maximum number of atoms 
+    values: ["2500"]
+
+  - key: Maximum small particle size
+    values: ["100", "200"]
+
+  - key: Mechanism
+    values: ["3step"]
+
+  - key: Linear solver type
+    values: ["gmres"]
+
+  - key: Preconditioner type
+    values: ["left", "right"]
+...
