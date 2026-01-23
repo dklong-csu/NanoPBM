@@ -16,7 +16,7 @@ Solvated complex initial condition: 0 # from paper: 0
 
 # Model choice  
 Mechanism: 3step # 3step or 4step
-Use emom: false  # true or false
+Use eMoM: false  # true or false
 
 # Reaction rates
 kf to kb ratio: 5.e-7 # from paper: 5.e-7
@@ -24,6 +24,9 @@ kb: 6.62e3            # from paper: 6.62e3
 k1: 1.24e5            # from paper: 1.24e5
 k2: 2.60e5            # from paper: 2.60e5
 k3: 6.22e3            # from paper: 6.22e3
+
+# Add a constant source term to the precursor
+Precursor source: 0.0
 
 # When to output data
 Time step size: 0.1
@@ -40,6 +43,6 @@ Preconditioner upper bandwidth: 1
 Preconditioner lower bandwidth: 1
 
 # Benchmarking: set to 1 if you just want to solve the ODE
-Number of runs: 10
+Number of runs: 1
 Output data: yes # yes or no
 ...
